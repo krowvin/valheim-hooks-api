@@ -6,6 +6,11 @@ services:
     command: ["valkey-server", "--appendonly", "yes"]
     ports: ["6379:6379"]
     volumes: [valkey-data:/data]
+    healthcheck:
+      test: ["CMD", "valkey-cli", "PING"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
 
   api:
     develop:
@@ -34,7 +39,8 @@ services:
     # keep container's node_modules separate so the bind doesn't overwrite them
     # - /usr/src/app/node_modules
     depends_on:
-      - cache
+      cache:
+        condition: service_healthy
 
 volumes:
   valkey-data:

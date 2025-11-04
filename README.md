@@ -15,3 +15,8 @@ This was especially useful because I tend to develop on my gaming computer which
 To run the dockercompose in dev/watch mode run
 
 `docker compose watch` from the root of the project
+
+### Useful valkey docker commands
+
+- List keys/values: `docker exec valheim-hooks-api-cache-1 valkey-cli keys *`
+- Clear all keys: `valkey-cli FLUSHALL`

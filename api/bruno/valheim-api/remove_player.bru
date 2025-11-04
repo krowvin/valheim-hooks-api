@@ -1,0 +1,18 @@
+meta {
+  name: /player/leave
+  type: http
+  seq: 1
+}
+
+post {
+  url: http://localhost:3000/player/leave
+  body: json
+  auth: none
+}
+
+body:json {
+  
+  {
+    "id": "test"
+  }
+}

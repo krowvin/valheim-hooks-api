@@ -1,0 +1,39 @@
+# docker-compose.yml (dev)
+
+services:
+  cache:
+    image: valkey/valkey:latest
+    command: ["valkey-server", "--appendonly", "yes"]
+    ports: ["6379:6379"]
+    volumes: [valkey-data:/data]
+
+  api:
+    develop:
+      watch:
+        - path: ./api/
+          target: /usr/src/app
+          action: sync
+        - path: ./api/package.json
+          action: rebuild
+        - path: ./api/package-lock.json
+          action: rebuild
+    build:
+      context: ./api
+      target: dev
+    command: npm run dev
+    environment:
+      NODE_ENV: development
+      VALKEY_HOST: cache
+      VALKEY_PORT: "6379"
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "300"
+    ports: ["3000:3000"]
+    # volumes:
+    # - ./api:/usr/src/app
+    # keep container's node_modules separate so the bind doesn't overwrite them
+    # - /usr/src/app/node_modules
+    depends_on:
+      - cache
+
+volumes:
+  valkey-data:

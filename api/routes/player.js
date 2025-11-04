@@ -1,6 +1,10 @@
 import { Router } from "express";
 import { getValkey } from "../cache/valkey.js";
 import { isPlayerMiddleware } from "../middleware/player.js";
+
+// Read env var for max players, default to 10
+const SERVER_MAX_PLAYERS = Number(process.env.SERVER_MAX_PLAYERS || 10);
+
 const router = Router();
 
 router.get("/", async (req, res) => {
@@ -11,72 +15,95 @@ router.get("/", async (req, res) => {
 
 router.post("/join", isPlayerMiddleware, async (req, res) => {
   const data = req.body;
-
   const kv = await getValkey();
+  const now = Date.now();
+
+  // Upsert player data (24h TTL) under key: player:id:<id>
   await kv.set(
-    `players:id:${data.id}`,
-    JSON.stringify({ ...data, joinedAt: Date.now() }),
-    {
-      ex: 3600 * 24,
-    }
+    `player:id:${data.id}`,
+    JSON.stringify({ ...data, joinedAt: now }),
+    { ex: 3600 * 24 }
   );
+
+  // Track online set by join time (sorted set: players:online)
+  await kv.customCommand([
+    "ZADD",
+    "players:online",
+    String(now),
+    String(data.id),
+  ]);
+
+  // Enforce max online: evict oldest extras (not including the new one since it has the newest score)
+  const size = Number(await kv.customCommand(["ZCARD", "players:online"]));
+  if (size > SERVER_MAX_PLAYERS) {
+    const overflow = size - SERVER_MAX_PLAYERS;
+
+    // Oldest 'overflow' ids
+    const oldest = await kv.customCommand([
+      "ZRANGE",
+      "players:online",
+      "0",
+      String(overflow - 1),
+    ]);
+
+    // Remove them from the online set
+    await kv.customCommand([
+      "ZREMRANGEBYRANK",
+      "players:online",
+      "0",
+      String(overflow - 1),
+    ]);
+
+    // Delete their player keys
+    for (const id of oldest) {
+      await kv.del(`player:id:${id}`);
+      console.log(`Evicted player id ${id} due to max online limit.`);
+    }
+  }
+
   res.send({ message: `Player ${data.id} has joined.` });
 });
 
 router.post("/leave", isPlayerMiddleware, async (req, res) => {
-  const data = req.body;
-
+  const { id } = req.body;
   const kv = await getValkey();
 
-  const playerData = await kv.get(`players:id:${req.body.id}`);
-  console.log("Player data on leave:", playerData);
+  const playerKey = `player:id:${id}`;
+  const playerData = await kv.get(playerKey);
   if (!playerData) {
     return res.status(400).send({ error: "Player not found." });
   }
+
   try {
-    await kv.del(`players:id:${data.id}`);
+    // Remove from zset and delete the player key
+    await kv.customCommand(["ZREM", "players:online", String(id)]);
+    await kv.del(playerKey);
   } catch (err) {
     return res.status(500).send({ error: "Failed to remove player data." });
   }
-  res.send({ message: `Player ${data.id} has left.` });
+
+  res.send({ message: `Player ${id} has left.` });
 });
+
 router.get("/online", async (req, res) => {
   try {
     const kv = await getValkey();
-    const pattern = "players:id:*";
-    const count = 200; // tune as needed
 
-    let cursor = "0";
-    const keys = [];
+    // Use the index set instead of SCAN for speed
+    const ids = await kv.customCommand(["ZRANGE", "players:online", "0", "-1"]);
 
-    do {
-      // SCAN <cursor> MATCH <pattern> COUNT <count>
-      const [nextCursor, batch] = await kv.customCommand([
-        "SCAN",
-        cursor,
-        "MATCH",
-        pattern,
-        "COUNT",
-        String(count),
-      ]);
-
-      cursor = String(nextCursor || "0");
-
-      // 'batch' is an array of keys (may be empty)
-      if (Array.isArray(batch) && batch.length) {
-        keys.push(...batch.map(String));
-      }
-    } while (cursor !== "0");
-
-    // Fetch and parse players
     const players = [];
-    for (const key of keys) {
-      const data = await kv.get(key);
-      if (!data) continue;
+    for (const id of ids) {
+      const raw = await kv.get(`player:id:${id}`);
+      if (!raw) {
+        // Clean up stale index entries where the key expired
+        await kv.customCommand(["ZREM", "players:online", String(id)]);
+        continue;
+      }
       try {
-        players.push({ pd: JSON.parse(data), key: key });
+        players.push(JSON.parse(raw));
       } catch {
-        players.push({ id: key.replace("players:", ""), raw: data });
+        players.push({ id: String(id), raw });
       }
     }
 

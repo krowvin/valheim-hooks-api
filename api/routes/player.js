@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { getValkey } from "../cache/valkey.js";
 import { isPlayerMiddleware } from "../middleware/player.js";
+import { requireApiKey } from "../middleware/auth.js";
 
 // Read env var for max players, default to 10
 const SERVER_MAX_PLAYERS = Number(process.env.SERVER_MAX_PLAYERS || 10);
@@ -13,7 +14,7 @@ router.get("/", async (req, res) => {
   res.json({ visits: count });
 });
 
-router.post("/join", isPlayerMiddleware, async (req, res) => {
+router.post("/join", requireApiKey, isPlayerMiddleware, async (req, res) => {
   const data = req.body;
   const kv = await getValkey();
   const now = Date.now();
@@ -64,7 +65,7 @@ router.post("/join", isPlayerMiddleware, async (req, res) => {
   res.send({ message: `Player ${data.id} has joined.` });
 });
 
-router.post("/leave", isPlayerMiddleware, async (req, res) => {
+router.post("/leave", requireApiKey, isPlayerMiddleware, async (req, res) => {
   const { id } = req.body;
   const kv = await getValkey();
 

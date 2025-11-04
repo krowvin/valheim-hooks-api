@@ -5,6 +5,13 @@ import { getValkey } from "./cache/valkey.js";
 // routes
 import playerRoutes from "./routes/player.js";
 
+// authentication
+import { ensureApiKey } from "./utils/apiKey.js";
+
+// Generate/load API key and log it each start
+const rootDir = process.cwd();
+ensureApiKey(rootDir);
+
 const app = express();
 const port = 3000;
 

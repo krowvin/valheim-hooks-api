@@ -25,6 +25,7 @@ services:
       NODE_ENV: development
       VALKEY_HOST: cache
       VALKEY_PORT: "6379"
+      VALHEIM_API_KEY: "test-api-key"
       CHOKIDAR_USEPOLLING: "true"
       CHOKIDAR_INTERVAL: "300"
     ports: ["3000:3000"]

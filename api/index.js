@@ -48,15 +48,6 @@ app.get("/", async (req, res) => {
 
 app.use("/player", apiLimiter, playerRoutes);
 
-// example route that uses Valkey
-app.get("/cache/foo", async (req, res) => {
-  await ready;
-  const kv = await getValkey();
-  await kv.set("foo", "bar");
-  const v = await kv.get("foo");
-  res.json({ foo: v });
-});
-
 app.listen(port, () => {
   console.log(`READY! API listening on :${port}`);
 });

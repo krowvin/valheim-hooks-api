@@ -7,7 +7,13 @@ meta {
 post {
   url: http://localhost:3000/player/leave
   body: json
-  auth: none
+  auth: apikey
+}
+
+auth:apikey {
+  key: x-api-key
+  value: test-api-key
+  placement: header
 }
 
 body:json {

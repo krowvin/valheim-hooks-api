@@ -6,12 +6,15 @@ import { getValkey } from "./cache/valkey.js";
 
 // routes
 import playerRoutes from "./routes/player.js";
+import eventsRoute from "./routes/events.js";
+import serverRoute from "./routes/server.js";
 
 // authentication
 import { ensureApiKey } from "./utils/apiKey.js";
 
 // middleware
 import { getGlobalLimiter, getApiLimiter } from "./middleware/rateLimit.js";
+import { requireApiKey } from "./middleware/auth.js";
 
 // Generate/load API key and log it each start
 const rootDir = process.cwd();
@@ -47,6 +50,8 @@ app.get("/", async (req, res) => {
 });
 
 app.use("/player", apiLimiter, playerRoutes);
+app.use("/events", requireApiKey, apiLimiter, eventsRoute);
+app.use("/server", requireApiKey, apiLimiter, serverRoute);
 
 app.listen(port, () => {
   console.log(`READY! API listening on :${port}`);

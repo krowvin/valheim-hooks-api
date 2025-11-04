@@ -1,44 +1,4 @@
 services:
-  cache:
-    image: valkey/valkey:latest
-    command: ["valkey-server", "--appendonly", "yes"]
-    ports: ["6379:6379"]
-    volumes: [valkey-data:/data]
-    healthcheck:
-      test: ["CMD", "valkey-cli", "PING"]
-      interval: 3s
-      timeout: 2s
-      retries: 10
-
-  api:
-    develop:
-      watch:
-        - path: ./api/
-          target: /usr/src/app
-          action: sync
-        - path: ./api/package.json
-          action: rebuild
-        - path: ./api/package-lock.json
-          action: rebuild
-    build:
-      context: ./api
-      target: dev
-    command: npm run dev
-    environment:
-      NODE_ENV: development
-      VALKEY_HOST: cache
-      VALKEY_PORT: "6379"
-      VALHEIM_API_KEY: "test-api-key"
-      CHOKIDAR_USEPOLLING: "true"
-      CHOKIDAR_INTERVAL: "300"
-    ports: ["3000:3000"]
-    # volumes:
-    # - ./api:/usr/src/app
-    # keep container's node_modules separate so the bind doesn't overwrite them
-    # - /usr/src/app/node_modules
-    depends_on:
-      cache:
-        condition: service_healthy
   valheim:
     image: lloesche/valheim-server:latest
     cap_add: ["SYS_NICE"]
@@ -91,14 +51,3 @@ services:
         -H "x-api-key: $${API_KEY}"
         -d "{\"line\":\"$${msg//\"/\\\"}\"}"
         "$${API_URL}/events/log"; }
-
-      VALHEIM_LOG_FILTER_CONTAINS_StartingServer: "Starting server"
-      ON_VALHEIM_LOG_FILTER_CONTAINS_StartingServer: >-
-        { read l; msg="$$l"; curl -sfSL -X POST
-          -H "Content-Type: application/json"
-          -H "x-api-key: $${API_KEY}"
-          -d "{\"line\":\"$${msg//\"/\\\"}\"}"
-          "$${API_URL:-http://api:3000}/server/log"; }
-
-volumes:
-  valkey-data:

@@ -11,7 +11,7 @@ export function ensureApiKey() {
 
     console.log(
       `\x1b[33m[API] Generated new VALHEIM_API_KEY:\t'${apiKey}'
-      \n\t\x1b[33mStore this value securely if you need to reuse it.\n\t\x1b[33mYou can also set your own generated API_KEY in the environment to persist it.\x1b[0m`
+      \n\t\x1b[33mStore this value securely if you need to reuse it.\n\t\x1b[33mYou can also set your own generated VALHEIM_API_KEY in the environment to persist it.\x1b[0m`
     );
     console.log("");
   } else {

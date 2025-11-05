@@ -11,7 +11,7 @@ import {
 } from "react-bootstrap";
 import dayjs from "dayjs";
 
-const API_URL = import.meta.env.VITE_VALHEIM_API_URL || "/api";
+const API_URL = import.meta.env.VITE_API_URL || "/api";
 const POLL_MS = 15000;
 
 async function fetchStatus() {

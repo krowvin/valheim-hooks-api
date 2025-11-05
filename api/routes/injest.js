@@ -139,11 +139,34 @@ async function markPlayerOfflineById(kv, playerId) {
   await kv.del(`player:sess:${playerId}`);
 }
 
+async function singlePlayerFallback(kv) {
+  const size = Number(await kv.customCommand(["ZCARD", "players:online"]));
+  if (size === 1) {
+    const [onlyId] = await kv.customCommand([
+      "ZRANGE",
+      "players:online",
+      "0",
+      "0",
+    ]);
+    if (onlyId) {
+      await markPlayerOfflineById(kv, String(onlyId));
+      return String(onlyId);
+    }
+  }
+  return null;
+}
+
 async function markPlayerOfflineBySteam(kv, steamId) {
   const playerId = await kv.get(`steam:to-player:${steamId}`);
-  if (!playerId) return { ok: false, reason: "no-map" };
-  await markPlayerOfflineById(kv, playerId);
-  return { ok: true, playerId };
+  if (playerId) {
+    await markPlayerOfflineById(kv, playerId);
+    return { ok: true, playerId };
+  }
+  // Fallback: if exactly one player is online, remove them
+  const guessed = await singlePlayerFallback(kv);
+  if (guessed)
+    return { ok: true, playerId: guessed, fallback: "single-online" };
+  return { ok: false, reason: "no-map" };
 }
 
 async function setServerStatus(kv, status, detail = "", at = Date.now()) {
@@ -258,6 +281,10 @@ router.post("/log", async (req, res) => {
   m = line.match(RE_CLOSING_SOCKET);
   if (m) {
     const steamId = m[1];
+
+    // record the closing steamId as candidate so a near future spawn can pair
+    await recordSteamCandidate(kv, steamId, now);
+
     const result = await markPlayerOfflineBySteam(kv, steamId);
     return res.json({
       handled: true,
@@ -270,6 +297,7 @@ router.post("/log", async (req, res) => {
 
   // fallback leave
   if (RE_RPC_DISCONNECT.test(line)) {
+    // try most recent candidate mapping
     const latest = await kv.customCommand([
       "ZREVRANGE",
       "steam:candidates",
@@ -289,6 +317,17 @@ router.post("/log", async (req, res) => {
           status: status || null,
         });
       }
+    }
+    // single-player fallback
+    const guessed = await singlePlayerFallback(kv);
+    if (guessed) {
+      return res.json({
+        handled: true,
+        kind: "leave-fallback",
+        playerId: guessed,
+        fallback: "single-online",
+        status: status || null,
+      });
     }
     return res.json({
       handled: true,

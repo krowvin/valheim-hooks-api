@@ -23,4 +23,4 @@ To run the docker compose in dev/watch mode run
 ### Useful valkey docker commands
 
 - List keys/values: `docker exec valheim-hooks-api-cache-1 valkey-cli keys *`
-- Clear all keys: `valkey-cli FLUSHALL`
+- Clear all keys: `docker exec valheim-hooks-api-cache-1 valkey-cli FLUSHALL`

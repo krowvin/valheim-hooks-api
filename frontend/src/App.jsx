@@ -312,6 +312,21 @@ export default function App() {
             </Card>
           </Col>
         </Row>
+        <footer className="mt-5 text-center text-secondary small">
+          <Container>
+            <div>
+              <span>Valheim Log Hooks Dashboard &mdash; </span>
+              <a
+                href="https://github.com/krowvin/valheim-hooks-api"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-white"
+              >
+                GitHub Repository
+              </a>
+            </div>
+          </Container>
+        </footer>
       </Container>
     </div>
   );

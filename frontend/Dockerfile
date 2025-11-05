@@ -16,7 +16,7 @@ FROM nginx:alpine AS prod
 RUN rm -rf /usr/share/nginx/html/*
 
 # SPA routing (serves index.html for unknown routes)
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/nginx.conf /etc/nginx/conf.d/default.conf
 
 # static assets
 COPY --from=build /app/dist /usr/share/nginx/html

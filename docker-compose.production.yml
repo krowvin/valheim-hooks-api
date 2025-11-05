@@ -7,7 +7,7 @@ services:
     restart: unless-stopped
 
   api:
-    image: ghcr.io/krowvin/krowvin/valheim-hooks-api-web:latest
+    image: ghcr.io/krowvin/krowvin/valheim-hooks-api-api:latest
     environment:
       NODE_ENV: production
       VALKEY_HOST: cache

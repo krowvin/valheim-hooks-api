@@ -3,7 +3,7 @@ services:
     image: valkey/valkey:latest
     command: ["valkey-server", "--appendonly", "yes"]
     ports: ["6379:6379"]
-    volumes: [valkey-data:/data]
+    #volumes: [valkey-data:/data]
     healthcheck:
       test: ["CMD", "valkey-cli", "PING"]
       interval: 3s
@@ -51,35 +51,10 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      # ---- /player hooks ----
-      VALHEIM_LOG_FILTER_CONTAINS_SteamID: "Got connection SteamID"
-      ON_VALHEIM_LOG_FILTER_CONTAINS_SteamID: >-
-        { read l; msg="$$l"; curl -sfSL -X POST -H "Content-Type: application/json" -H "x-api-key: $${API_KEY}" -d "{\"line\":\"$${msg//\"/\\\"}\"}" "$${API_URL}/events/log"; }
-
-      VALHEIM_LOG_FILTER_CONTAINS_Handshake: "Got handshake from client"
-      ON_VALHEIM_LOG_FILTER_CONTAINS_Handshake: >-
-        { read l; msg="$$l"; curl -sfSL -X POST -H "Content-Type: application/json" -H "x-api-key: $${API_KEY}" -d "{\"line\":\"$${msg//\"/\\\"}\"}" "$${API_URL}/events/log"; }
-
-      VALHEIM_LOG_FILTER_CONTAINS_Spawned: "Got character ZDOID from"
-      ON_VALHEIM_LOG_FILTER_CONTAINS_Spawned: >-
-        { read l; msg="$$l"; curl -sfSL -X POST -H "Content-Type: application/json" -H "x-api-key: $${API_KEY}" -d "{\"line\":\"$${msg//\"/\\\"}\"}" "$${API_URL}/events/log"; }
-
-      VALHEIM_LOG_FILTER_CONTAINS_ClosingSocket: "Closing socket"
-      ON_VALHEIM_LOG_FILTER_CONTAINS_ClosingSocket: >-
-        { read l; msg="$$l"; curl -sfSL -X POST -H "Content-Type: application/json" -H "x-api-key: $${API_KEY}" -d "{\"line\":\"$${msg//\"/\\\"}\"}" "$${API_URL}/events/log"; }
-
-      # ---- /server hooks ----
-      VALHEIM_LOG_FILTER_CONTAINS_StartingServer: "Loading first scene"
-      ON_VALHEIM_LOG_FILTER_CONTAINS_StartingServer: >-
-        { read l; msg="$$l"; curl -sfSL -X POST -H "Content-Type: application/json" -H "x-api-key: $${API_KEY}" -d "{\"line\":\"$${msg//\"/\\\"}\"}" "$${API_URL}/server/log"; }
-
-      VALHEIM_LOG_FILTER_CONTAINS_Connected: "Opened Steam server"
-      ON_VALHEIM_LOG_FILTER_CONTAINS_Connected: >-
-        { read l; msg="$$l"; curl -sfSL -X POST -H "Content-Type: application/json" -H "x-api-key: $${API_KEY}" -d "{\"line\":\"$${msg//\"/\\\"}\"}" "$${API_URL}/server/log"; }
-
-      VALHEIM_LOG_FILTER_CONTAINS_ShuttingDown: "Shutting down"
-      ON_VALHEIM_LOG_FILTER_CONTAINS_ShuttingDown: >-
-        { read l; msg="$$l"; curl -sfSL -X POST -H "Content-Type: application/json" -H "x-api-key: $${API_KEY}" -d "{\"line\":\"$${msg//\"/\\\"}\"}" "$${API_URL}/server/log"; }
+      # API Regex - send all log lines to api server
+      VALHEIM_LOG_FILTER_REGEXP_All: ".*"
+      ON_VALHEIM_LOG_FILTER_REGEXP_All: >-
+        { read l; msg="$$l"; curl -sfSL -m 2 -X POST -H "Content-Type: application/json" -H "x-api-key: $${API_KEY}" -d "{\"line\":\"$${msg//\"/\\\"}\"}" "$${API_URL:-http://api:3000}/ingest/log"; }
 
 volumes:
   valkey-data:

@@ -37,6 +37,8 @@ services:
     env_file: .env.valheim
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks:
+      - valheim-net
     environment:
       # ---- /player hooks ----
       VALHEIM_LOG_FILTER_CONTAINS_SteamID: "Got connection SteamID"

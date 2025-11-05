@@ -1,12 +1,11 @@
-// /api/routes/events.js
+// /api/routes/ingest.js
 import { Router } from "express";
 import { getValkey } from "../cache/valkey.js";
 
 const router = Router();
 
-/**
- * Patterns (single log line per POST)
- */
+/* ------------ Patterns ------------ */
+// Player/connection
 const RE_STEAM_CONN = /Got connection SteamID\s+(\d{17})/i;
 const RE_STEAM_HANDSHAKE = /Got handshake from client\s+(\d{17})/i;
 const RE_PLAYER_SPAWNED =
@@ -14,20 +13,30 @@ const RE_PLAYER_SPAWNED =
 const RE_CLOSING_SOCKET = /Closing socket\s+(\d{17})/i;
 const RE_RPC_DISCONNECT = /\bRPC_Disconnect\b/i;
 
+// Server lifecycle
+const RE_UPDATING =
+  /(Checking for updates|Update available|Downloading update|Installing update)/i;
+const RE_UPDATED =
+  /(Updates installed|Update completed|Finished installing update)/i;
+const RE_STARTING = /(Begin MonoManager ReloadAssembly)/i;
+const RE_ONLINE = /(Opened Steam server)/i;
+const RE_SHUTTING =
+  /(Shutting down|Stopping server|Quit game|Server stopping)/i;
+const RE_OFFLINE = /(Exited cleanly|Server stopped|Valheim server exited)/i;
+
+/* ------------ Constants ------------ */
 const STEAM_CANDIDATE_TTL_SEC = 60;
 const STEAM_PAIR_WINDOW_MS = 30_000;
 const PLAYER_TTL_SEC = 24 * 3600;
 const MAX_ONLINE = 10;
 
 async function recordSteamCandidate(kv, steamId, now = Date.now()) {
-  // zset score = ms timestamp
   await kv.customCommand([
     "ZADD",
     "steam:candidates",
     String(now),
     String(steamId),
   ]);
-  // trim old candidates beyond TTL
   const cutoff = String(now - STEAM_CANDIDATE_TTL_SEC * 1000);
   await kv.customCommand([
     "ZREMRANGEBYSCORE",
@@ -37,14 +46,9 @@ async function recordSteamCandidate(kv, steamId, now = Date.now()) {
   ]);
 }
 
-/**
- * On seeing a Spawned line with a name, associate with most recent steam candidate
- */
 async function pairNameWithRecentSteam(kv, playerName, now = Date.now()) {
   const minScore = String(now - STEAM_PAIR_WINDOW_MS);
   const maxScore = String(now);
-
-  // get most recent candidate in window
   const candidates = await kv.customCommand([
     "ZREVRANGEBYSCORE",
     "steam:candidates",
@@ -69,11 +73,9 @@ async function pairNameWithRecentSteam(kv, playerName, now = Date.now()) {
 
 async function markPlayerOnline(kv, playerId, extra = {}) {
   const now = Date.now();
-
-  // Session tracking: create session hash if missing
   const sessKey = `player:sess:${playerId}`;
-  const hasSession = await kv.customCommand(["EXISTS", sessKey]);
-  if (!Number(hasSession)) {
+  const hasSession = Number(await kv.customCommand(["EXISTS", sessKey]));
+  if (!hasSession) {
     await kv.customCommand([
       "HSET",
       sessKey,
@@ -85,14 +87,13 @@ async function markPlayerOnline(kv, playerId, extra = {}) {
   }
   await kv.customCommand(["EXPIRE", sessKey, String(PLAYER_TTL_SEC)]);
 
-  // Upsert player record
   await kv.set(
     `player:id:${playerId}`,
     JSON.stringify({ id: playerId, joinedAt: now, ...extra }),
     { ex: PLAYER_TTL_SEC }
   );
 
-  // Add to online zset; if already present, just refresh score to 'now'
+  // refresh score if exists, else add new and enforce cap
   await kv.customCommand([
     "ZADD",
     "players:online",
@@ -101,7 +102,6 @@ async function markPlayerOnline(kv, playerId, extra = {}) {
     String(now),
     String(playerId),
   ]);
-  // If not present, add it
   const added = await kv.customCommand([
     "ZADD",
     "players:online",
@@ -109,7 +109,6 @@ async function markPlayerOnline(kv, playerId, extra = {}) {
     String(now),
     String(playerId),
   ]);
-  // Cap at MAX_ONLINE only if this was a new add
   if (Number(added) > 0) {
     const size = Number(await kv.customCommand(["ZCARD", "players:online"]));
     if (size > MAX_ONLINE) {
@@ -147,12 +146,32 @@ async function markPlayerOfflineBySteam(kv, steamId) {
   return { ok: true, playerId };
 }
 
-/**
- * POST /events/log
- * Body: { line: string, ts?: string }
- */
+async function setServerStatus(kv, status, detail = "", at = Date.now()) {
+  const payload = { status, at, detail };
+  await kv.set("server:status", JSON.stringify(payload), { ex: 7 * 24 * 3600 });
+  await kv.customCommand([
+    "ZADD",
+    "server:history",
+    String(at),
+    JSON.stringify(payload),
+  ]);
+  return payload;
+}
+
+function classifyServer(line) {
+  if (RE_UPDATING.test(line)) return "updating";
+  if (RE_UPDATED.test(line)) return "updated";
+  if (RE_STARTING.test(line)) return "starting";
+  if (RE_ONLINE.test(line)) return "online";
+  if (RE_SHUTTING.test(line)) return "shutting_down";
+  if (RE_OFFLINE.test(line)) return "offline";
+  return null;
+}
+
+/* ------------ Unified ingest endpoint ------------ */
 router.post("/log", async (req, res) => {
   const { line = "", ts } = req.body || {};
+  console.log("Ingest log line:", line);
   if (!line || typeof line !== "string") {
     return res.status(400).json({ error: "Missing 'line' string in body" });
   }
@@ -160,28 +179,38 @@ router.post("/log", async (req, res) => {
   const kv = await getValkey();
   const now = ts ? Date.parse(ts) || Date.now() : Date.now();
 
-  // 1) Steam ID candidates
-  let m = line.match(RE_STEAM_CONN) || line.match(RE_STEAM_HANDSHAKE);
-  if (m) {
-    const steamId = m[1];
-    await recordSteamCandidate(kv, steamId, now);
-    return res.json({ handled: true, type: "steam-candidate", steamId });
+  // ---- server status first (cheap, independent) ----
+  const status = classifyServer(line);
+  if (status) {
+    await setServerStatus(kv, status, line, now);
   }
 
-  // 2) Spawned: join vs death
+  // ---- player/connection events ----
+  let m;
+
+  // candidates
+  m = line.match(RE_STEAM_CONN) || line.match(RE_STEAM_HANDSHAKE);
+  if (m) {
+    await recordSteamCandidate(kv, m[1], now);
+    return res.json({
+      handled: true,
+      kind: "steam-candidate",
+      status: status || null,
+    });
+  }
+
+  // spawned: join vs death (0:0)
   m = line.match(RE_PLAYER_SPAWNED);
   if (m) {
-    const playerName = m[1].trim();
-    const a = Number(m[2]); // owner part
-    const b = Number(m[3]); // zdo id
+    const name = m[1].trim();
+    const a = Number(m[2]);
+    const b = Number(m[3]);
     const isDeath = a === 0 && b === 0;
 
     if (isDeath) {
-      // Increment deaths for the current session
-      const sessKey = `player:sess:${playerName}`;
+      const sessKey = `player:sess:${name}`;
       const exists = Number(await kv.customCommand(["EXISTS", sessKey]));
-      if (!exists) {
-        // If we somehow saw a death with no session, create a session now so the death is counted.
+      if (!exists)
         await kv.customCommand([
           "HSET",
           sessKey,
@@ -190,51 +219,56 @@ router.post("/log", async (req, res) => {
           "deaths",
           "0",
         ]);
-      }
       const deaths = Number(
         await kv.customCommand(["HINCRBY", sessKey, "deaths", "1"])
       );
       await kv.customCommand(["EXPIRE", sessKey, String(PLAYER_TTL_SEC)]);
-      // Optionally reflect in player:id record
-      const raw = await kv.get(`player:id:${playerName}`);
-      let obj = raw ? JSON.parse(raw) : { id: playerName };
+      const raw = await kv.get(`player:id:${name}`);
+      let obj = raw ? JSON.parse(raw) : { id: name };
       obj.lastDeathAt = now;
       obj.sessionDeaths = deaths;
-      await kv.set(`player:id:${playerName}`, JSON.stringify(obj), {
+      await kv.set(`player:id:${name}`, JSON.stringify(obj), {
         ex: PLAYER_TTL_SEC,
       });
 
       return res.json({
         handled: true,
-        type: "death",
-        playerId: playerName,
+        kind: "death",
+        playerId: name,
         sessionDeaths: deaths,
+        status: status || null,
       });
     } else {
-      // Treat as (re)spawn/join; pair steam if possible; mark online
-      const steamId = await pairNameWithRecentSteam(kv, playerName, now);
-      await markPlayerOnline(kv, playerName, {
+      const steamId = await pairNameWithRecentSteam(kv, name, now);
+      await markPlayerOnline(kv, name, {
         steamId: steamId || undefined,
         source: "spawned",
       });
       return res.json({
         handled: true,
-        type: "join",
-        playerId: playerName,
+        kind: "join",
+        playerId: name,
         steamId: steamId || null,
+        status: status || null,
       });
     }
   }
 
-  // Explicit close socket → leave
+  // explicit leave
   m = line.match(RE_CLOSING_SOCKET);
   if (m) {
     const steamId = m[1];
     const result = await markPlayerOfflineBySteam(kv, steamId);
-    return res.json({ handled: true, type: "leave", steamId, ...result });
+    return res.json({
+      handled: true,
+      kind: "leave",
+      steamId,
+      ...result,
+      status: status || null,
+    });
   }
 
-  // RPC disconnect fallback
+  // fallback leave
   if (RE_RPC_DISCONNECT.test(line)) {
     const latest = await kv.customCommand([
       "ZREVRANGE",
@@ -249,16 +283,26 @@ router.post("/log", async (req, res) => {
         await markPlayerOfflineById(kv, mapped);
         return res.json({
           handled: true,
-          type: "leave-fallback",
+          kind: "leave-fallback",
           steamId,
           playerId: mapped,
+          status: status || null,
         });
       }
     }
-    return res.json({ handled: true, type: "leave-fallback", guess: null });
+    return res.json({
+      handled: true,
+      kind: "leave-fallback",
+      guess: null,
+      status: status || null,
+    });
   }
 
-  return res.json({ handled: false, type: "ignored" });
+  // no player event; maybe only server status changed
+  if (status) return res.json({ handled: true, kind: "server", status });
+
+  // ignore noisy line
+  return res.status(204).send();
 });
 
 export default router;

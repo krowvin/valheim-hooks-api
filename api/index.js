@@ -6,8 +6,8 @@ import { getValkey } from "./cache/valkey.js";
 
 // routes
 import playerRoutes from "./routes/player.js";
-import eventsRoute from "./routes/events.js";
 import serverRoute from "./routes/server.js";
+import ingestRoute from "./routes/injest.js";
 
 // authentication
 import { ensureApiKey } from "./utils/apiKey.js";
@@ -38,7 +38,7 @@ const [globalLimiter, apiLimiter] = await Promise.all([
   getGlobalLimiter(),
   getApiLimiter(),
 ]);
-app.use(globalLimiter);
+// app.use(globalLimiter);
 // TODO: Handle errors
 // TODO: Handle headers
 
@@ -53,9 +53,9 @@ app.get("/", async (req, res) => {
   res.json({ status: "ok" });
 });
 
-app.use("/player", apiLimiter, playerRoutes);
-app.use("/server", apiLimiter, serverRoute);
-app.use("/events", requireApiKey, apiLimiter, eventsRoute);
+app.use("/player", globalLimiter, playerRoutes);
+app.use("/server", globalLimiter, serverRoute);
+app.use("/ingest", requireApiKey, ingestRoute);
 
 app.listen(port, () => {
   console.log(`READY! API listening on :${port}`);

@@ -78,10 +78,7 @@ export async function getGlobalLimiter(
   });
 }
 
-export async function getApiLimiter(
-  maxRequests = 1000,
-  windowMs = 5 * 60 * 1000
-) {
+export async function getApiLimiter(maxRequests = 1000, windowMs = 1000) {
   console.log(
     `Creating API rate limiter: ${maxRequests} requests per ${
       windowMs / 1000 / 60

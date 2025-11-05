@@ -1,0 +1,72 @@
+services:
+  cache:
+    image: valkey/valkey:8-alpine
+    command: ["valkey-server", "--appendonly", "yes"]
+    # volumes:
+    #   - valkey-data:/data
+    restart: unless-stopped
+
+  api:
+    image: ghcr.io/krowvin/krowvin/valheim-hooks-api-web:latest
+    environment:
+      NODE_ENV: production
+      VALKEY_HOST: cache
+      VALKEY_PORT: "6379"
+      API_KEY: ${API_KEY}
+      VALHEIM_SERVER_NAME: "Test Server"
+      SERVER_MAX_PLAYERS: "10"
+    depends_on:
+      - cache
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+  web:
+    image: ghcr.io/krowvin/krowvin/valheim-hooks-api-web
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+  valheim:
+    image: lloesche/valheim-server:latest
+    cap_add: ["SYS_NICE"]
+    stop_grace_period: 120s
+    ports:
+      - "2456-2457:2456-2457/udp"
+    env_file: .env.valheim
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # ---- /player hooks ----
+      VALHEIM_LOG_FILTER_CONTAINS_SteamID: "Got connection SteamID"
+      ON_VALHEIM_LOG_FILTER_CONTAINS_SteamID: >-
+        { read l; msg="$$l"; curl -sfSL -X POST -H "Content-Type: application/json" -H "x-api-key: $${API_KEY}" -d "{\"line\":\"$${msg//\"/\\\"}\"}" "$${API_URL}/events/log"; }
+
+      VALHEIM_LOG_FILTER_CONTAINS_Handshake: "Got handshake from client"
+      ON_VALHEIM_LOG_FILTER_CONTAINS_Handshake: >-
+        { read l; msg="$$l"; curl -sfSL -X POST -H "Content-Type: application/json" -H "x-api-key: $${API_KEY}" -d "{\"line\":\"$${msg//\"/\\\"}\"}" "$${API_URL}/events/log"; }
+
+      VALHEIM_LOG_FILTER_CONTAINS_Spawned: "Got character ZDOID from"
+      ON_VALHEIM_LOG_FILTER_CONTAINS_Spawned: >-
+        { read l; msg="$$l"; curl -sfSL -X POST -H "Content-Type: application/json" -H "x-api-key: $${API_KEY}" -d "{\"line\":\"$${msg//\"/\\\"}\"}" "$${API_URL}/events/log"; }
+
+      VALHEIM_LOG_FILTER_CONTAINS_ClosingSocket: "Closing socket"
+      ON_VALHEIM_LOG_FILTER_CONTAINS_ClosingSocket: >-
+        { read l; msg="$$l"; curl -sfSL -X POST -H "Content-Type: application/json" -H "x-api-key: $${API_KEY}" -d "{\"line\":\"$${msg//\"/\\\"}\"}" "$${API_URL}/events/log"; }
+
+      # ---- /server hooks ----
+      VALHEIM_LOG_FILTER_CONTAINS_StartingServer: "Loading first scene"
+      ON_VALHEIM_LOG_FILTER_CONTAINS_StartingServer: >-
+        { read l; msg="$$l"; curl -sfSL -X POST -H "Content-Type: application/json" -H "x-api-key: $${API_KEY}" -d "{\"line\":\"$${msg//\"/\\\"}\"}" "$${API_URL}/server/log"; }
+
+      VALHEIM_LOG_FILTER_CONTAINS_Connected: "Opened Steam server"
+      ON_VALHEIM_LOG_FILTER_CONTAINS_Connected: >-
+        { read l; msg="$$l"; curl -sfSL -X POST -H "Content-Type: application/json" -H "x-api-key: $${API_KEY}" -d "{\"line\":\"$${msg//\"/\\\"}\"}" "$${API_URL}/server/log"; }
+
+      VALHEIM_LOG_FILTER_CONTAINS_ShuttingDown: "Shutting down"
+      ON_VALHEIM_LOG_FILTER_CONTAINS_ShuttingDown: >-
+        { read l; msg="$$l"; curl -sfSL -X POST -H "Content-Type: application/json" -H "x-api-key: $${API_KEY}" -d "{\"line\":\"$${msg//\"/\\\"}\"}" "$${API_URL}/server/log"; }
+
+volumes:
+  valkey-data:

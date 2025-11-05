@@ -5,12 +5,12 @@ on:
         branches: [main]
         paths:
             - "api/**"
-            - ".github/workflows/api-images.yml"
+            - ".github/workflows/api-image.yml"
     pull_request:
         branches: [main]
         paths:
             - "api/**"
-            - ".github/workflows/api-images.yml"
+            - ".github/workflows/api-image.yml"
 
 permissions:
     contents: read

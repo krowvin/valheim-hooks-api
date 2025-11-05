@@ -29,6 +29,8 @@ services:
       VALKEY_HOST: cache
       VALKEY_PORT: "6379"
       VALHEIM_API_KEY: "test-api-key"
+      VALHEIM_SERVER_NAME: "Test Server"
+      SERVER_MAX_PLAYERS: "10"
       CHOKIDAR_USEPOLLING: "true"
       CHOKIDAR_INTERVAL: "300"
     ports: ["3000:3000"]

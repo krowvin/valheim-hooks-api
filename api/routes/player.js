@@ -2,9 +2,7 @@ import { Router } from "express";
 import { getValkey } from "../cache/valkey.js";
 import { isPlayerMiddleware } from "../middleware/player.js";
 import { requireApiKey } from "../middleware/auth.js";
-
-// Read env var for max players, default to 10
-const SERVER_MAX_PLAYERS = Number(process.env.SERVER_MAX_PLAYERS || 10);
+import { SERVER_MAX_PLAYERS } from "../index.js";
 
 const router = Router();
 
@@ -108,7 +106,7 @@ router.get("/online", async (req, res) => {
       }
     }
 
-    res.json({ count: players.length, players });
+    res.json({ count: players.length, maxCount: SERVER_MAX_PLAYERS, players });
   } catch (err) {
     console.error("Error fetching players:", err);
     res.status(500).json({ error: "Failed to fetch online players" });

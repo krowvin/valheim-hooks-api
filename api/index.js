@@ -16,6 +16,10 @@ import { ensureApiKey } from "./utils/apiKey.js";
 import { getGlobalLimiter, getApiLimiter } from "./middleware/rateLimit.js";
 import { requireApiKey } from "./middleware/auth.js";
 
+// Read env var for max players, default to 10
+const SERVER_MAX_PLAYERS = Number(process.env.SERVER_MAX_PLAYERS || 10);
+const SERVER_NAME = process.env.VALHEIM_SERVER_NAME || "Valheim Server";
+
 // Generate/load API key and log it each start
 const rootDir = process.cwd();
 ensureApiKey(rootDir);
@@ -50,9 +54,11 @@ app.get("/", async (req, res) => {
 });
 
 app.use("/player", apiLimiter, playerRoutes);
+app.use("/server", apiLimiter, serverRoute);
 app.use("/events", requireApiKey, apiLimiter, eventsRoute);
-app.use("/server", requireApiKey, apiLimiter, serverRoute);
 
 app.listen(port, () => {
   console.log(`READY! API listening on :${port}`);
 });
+
+export { SERVER_MAX_PLAYERS, SERVER_NAME };

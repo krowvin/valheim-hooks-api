@@ -1,7 +1,7 @@
 // /api/routes/server.js
 import { Router } from "express";
 import { getValkey } from "../cache/valkey.js";
-
+import { SERVER_NAME } from "../index.js";
 /**
  * Parse server lifecycle from Valheim logs posted via Docker log hooks.
  * Expected body: { line: string, ts?: string }
@@ -114,7 +114,7 @@ router.get("/status", async (_req, res) => {
     }
   }
 
-  res.json({ current, history: parsedHistory });
+  res.json({ name: SERVER_NAME, current, history: parsedHistory });
 });
 
 export default router;

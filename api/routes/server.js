@@ -12,9 +12,9 @@ const RE_UPDATING =
 const RE_UPDATED =
   /(Updates installed|Update completed|Finished installing update)/i;
 const RE_STARTING =
-  /(Starting server|Bootstrapping|Launching Valheim server|Server starting)/i;
+  /(Starting server|Bootstrapping|Launching Valheim server|Server starting|Loading first scene)/i;
 const RE_ONLINE =
-  /(Connected\b|Game server connected|Game server listening|Server: New peer connected)/i;
+  /(Connected\b|Opened Steam server|Game server listening|Server: New peer connected)/i;
 const RE_SHUTTING_DOWN =
   /(Shutting down|Stopping server|Quit game|Server stopping)/i;
 const RE_OFFLINE = /(Exited cleanly|Server stopped|Valheim server exited)/i;
@@ -23,7 +23,6 @@ const STATUS = {
   UPDATING: "updating",
   STARTING: "starting",
   ONLINE: "online",
-  SHUTTING_DOWN: "shutting_down",
   OFFLINE: "offline",
   UPDATED: "updated",
 };
@@ -48,7 +47,7 @@ function classify(line) {
   if (RE_UPDATED.test(line)) return STATUS.UPDATED;
   if (RE_STARTING.test(line)) return STATUS.STARTING;
   if (RE_ONLINE.test(line)) return STATUS.ONLINE;
-  if (RE_SHUTTING_DOWN.test(line)) return STATUS.SHUTTING_DOWN;
+  if (RE_SHUTTING_DOWN.test(line)) return STATUS.OFFLINE;
   if (RE_OFFLINE.test(line)) return STATUS.OFFLINE;
   return null;
 }

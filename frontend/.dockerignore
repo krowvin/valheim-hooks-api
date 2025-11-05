@@ -3,7 +3,6 @@ dist
 .git
 .gitignore
 Dockerfile
-nginx.conf
 npm-debug.log
 .vscode
 .idea

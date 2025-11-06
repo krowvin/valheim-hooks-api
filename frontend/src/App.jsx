@@ -8,6 +8,7 @@ import {
   ListGroup,
   Row,
   Spinner,
+  Table,
 } from "react-bootstrap";
 import dayjs from "dayjs";
 
@@ -31,6 +32,14 @@ async function fetchOnline() {
   return await res.json();
 }
 
+async function fetchRaids() {
+  const res = await fetch(`${API_URL}/raids?limit=10`, {
+    headers: { "cache-control": "no-cache" },
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return await res.json();
+}
+
 export default function App() {
   const qc = useQueryClient();
 
@@ -39,20 +48,29 @@ export default function App() {
     queryFn: fetchStatus,
     refetchInterval: POLL_MS,
     refetchOnWindowFocus: false,
-    retry: 2,
+    retry: false,
   });
 
   const players = useQuery({
     queryKey: ["valheim", "player"],
     queryFn: fetchOnline,
     refetchInterval: POLL_MS,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
     retry: false,
   });
 
-  const isLoading = server.isLoading || players.isLoading;
-  const isFetching = server.isFetching || players.isFetching;
-  const error = players.error || server.error;
+  const raids = useQuery({
+    queryKey: ["valheim", "raids"],
+    queryFn: fetchRaids,
+    refetchInterval: POLL_MS,
+    refetchOnWindowFocus: true,
+    retry: false,
+  });
+
+  const isLoading = server.isLoading || players.isLoading || raids.isLoading;
+  const isFetching =
+    server.isFetching || players.isFetching || raids.isFetching;
+  const error = players.error || server.error || raids.error;
 
   const handleRefresh = () => {
     qc.invalidateQueries({ queryKey: ["valheim"] });
@@ -231,7 +249,6 @@ export default function App() {
               </Card.Header>
 
               <Card.Body className="pt-3">
-                {/* Current status */}
                 <div className="mb-3">
                   <div className="small text-white mb-1">Currently</div>
                   <div className="d-flex align-items-start gap-2">
@@ -268,7 +285,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* History (scrollable) */}
                 <div>
                   <div className="small text-secondary mb-1">History</div>
                   <div
@@ -312,6 +328,84 @@ export default function App() {
             </Card>
           </Col>
         </Row>
+
+        <Row className="g-4 mt-1">
+          <Col xs={12}>
+            <Card bg="dark" text="light" className="shadow-sm border-secondary">
+              <Card.Header className="d-flex align-items-center">
+                <span className="me-auto">Recent Raids</span>
+                <Badge bg="secondary">{raids.data?.count ?? 0}</Badge>
+              </Card.Header>
+              <Card.Body className="p-0">
+                {raids.isLoading ? (
+                  <div className="p-3 d-flex align-items-center gap-2">
+                    <Spinner animation="border" />
+                    <span className="text-secondary">
+                      Consulting the ravens…
+                    </span>
+                  </div>
+                ) : raids.error ? (
+                  <div className="p-3 alert alert-danger mb-0">
+                    Couldn&apos;t fetch raids:{" "}
+                    <code>{String(raids.error.message || raids.error)}</code>
+                  </div>
+                ) : (raids.data?.raids?.length || 0) === 0 ? (
+                  <div className="p-3 text-secondary">
+                    No raids recorded yet.
+                  </div>
+                ) : (
+                  <div className="table-responsive">
+                    <Table
+                      striped
+                      hover
+                      borderless
+                      variant="dark"
+                      className="mb-0 align-middle"
+                    >
+                      <thead className="text-secondary">
+                        <tr>
+                          <th style={{ minWidth: 160 }}>When</th>
+                          <th>Raid</th>
+                          {/* <th className="d-none d-sm-table-cell">Detail</th> */}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {raids.data.raids.map((r, idx) => (
+                          <tr key={idx}>
+                            <td>
+                              <div className="fw-semibold">
+                                {dayjs(r.time).format("MMM D, HH:mm")}
+                              </div>
+                              <div className="small text-secondary">
+                                {dayjs(r.time).fromNow?.() ||
+                                  new Date(r.time).toLocaleTimeString()}
+                              </div>
+                            </td>
+                            <td className="text-break">
+                              <Badge
+                                bg="outline"
+                                className="border border-secondary text-light"
+                              >
+                                {prettyRaid(r.raid)}
+                              </Badge>
+                            </td>
+                            {/* <td className="d-none d-sm-table-cell text-secondary">
+                              {r.detail || "—"}
+                            </td> */}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                  </div>
+                )}
+              </Card.Body>
+              <Card.Footer className="text-end text-secondary small">
+                Auto-refresh: {Math.round(POLL_MS / 1000)}s
+              </Card.Footer>
+            </Card>
+          </Col>
+        </Row>
+
         <footer className="mt-5 text-center text-secondary small">
           <Container>
             <div>
@@ -337,14 +431,11 @@ function normalizeStatus(json) {
   const name = json.name || json.serverName || "Valheim";
   const current = json.current || null;
   const history = Array.isArray(json.history) ? json.history : [];
-
-  // Try to preserve older fields if present
   const rawPlayers = Array.isArray(json.players)
     ? json.players
     : Array.isArray(json.raw?.players)
     ? json.raw.players
     : [];
-
   const max = pickNumber(
     json.maxPlayers,
     json.maxplayers,
@@ -363,8 +454,6 @@ function normalizeStatus(json) {
       timeSeconds: toNumber(p.time ?? p.duration, 0),
     })),
     updatedAt: json.updatedAt || Date.now(),
-
-    // New fields for UI
     current,
     history,
   };
@@ -409,6 +498,12 @@ function statusDot(status) {
 function prettyStatus(status) {
   if (!status) return "Unknown";
   return String(status).replace(/_/g, " ");
+}
+
+function prettyRaid(name) {
+  const n = String(name || "").trim();
+  if (!n) return "unknown";
+  return n.replace(/_/g, " ");
 }
 
 function pickNumber(...vals) {

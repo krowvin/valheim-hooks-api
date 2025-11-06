@@ -8,6 +8,7 @@ import { getValkey } from "./cache/valkey.js";
 import playerRoutes from "./routes/player.js";
 import serverRoute from "./routes/server.js";
 import ingestRoute from "./routes/injest.js";
+import raidsRoutes from "./routes/raids.js";
 
 // authentication
 import { ensureApiKey } from "./utils/apiKey.js";
@@ -54,6 +55,7 @@ app.get("/", async (req, res) => {
 });
 
 app.use("/player", globalLimiter, playerRoutes);
+app.use("/raids", globalLimiter, raidsRoutes);
 app.use("/server", globalLimiter, serverRoute);
 app.use("/ingest", requireApiKey, ingestRoute);
 

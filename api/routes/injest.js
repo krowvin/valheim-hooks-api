@@ -23,6 +23,7 @@ const RE_ONLINE = /(Opened Steam server)/i;
 const RE_SHUTTING =
   /(Shutting down|Stopping server|Quit game|Server stopping)/i;
 const RE_OFFLINE = /(Exited cleanly|Server stopped|Valheim server exited)/i;
+const RE_RAID = /(Random event set:)/i;
 
 /* ------------ Constants ------------ */
 const STEAM_CANDIDATE_TTL_SEC = 60;
@@ -188,6 +189,7 @@ function classifyServer(line) {
   if (RE_ONLINE.test(line)) return "online";
   if (RE_SHUTTING.test(line)) return "shutting_down";
   if (RE_OFFLINE.test(line)) return "offline";
+  if (RE_RAID.test(line)) return "raid_event";
   return null;
 }
 
@@ -204,7 +206,8 @@ router.post("/log", async (req, res) => {
 
   // ---- server status first (cheap, independent) ----
   const status = classifyServer(line);
-  if (status) {
+  // Avoid setting raid events because the server will not reset from a raid on its own
+  if (status && status !== "raid_event") {
     await setServerStatus(kv, status, line, now);
   }
 
@@ -335,6 +338,21 @@ router.post("/log", async (req, res) => {
       guess: null,
       status: status || null,
     });
+  }
+
+  if (RE_RAID.test(line)) {
+    // Create a list of the last 10 raids and store into valkey
+    const lastRaids = await kv.lrange("raids:last", 0, 9);
+    await kv.lpush(
+      "raids:last",
+      JSON.stringify({
+        time: now,
+        raid: line.split(":").at(-1).trim(),
+      })
+    );
+    await kv.ltrim("raids:last", 0, 9);
+
+    return res.json({ lastRaids });
   }
 
   // no player event; maybe only server status changed

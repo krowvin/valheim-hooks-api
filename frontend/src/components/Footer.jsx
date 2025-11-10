@@ -28,7 +28,10 @@ export default function Footer() {
           </a>
         </div>
 
-        <div className="text-secondary">
+        <div
+          className="text-secondary"
+          title={"Built at " + dayjs(build.data.builtAt).toString()}
+        >
           {build.isLoading ? (
             "Loading version..."
           ) : build.error ? (
@@ -38,9 +41,6 @@ export default function Footer() {
               Build {build.data?.version}
               {build.data?.shortSha ? (
                 <> &middot; {build.data.shortSha}</>
-              ) : null}
-              {build.data?.builtAt ? (
-                <> &middot; {dayjs(build.data.builtAt).format("LLL")}</>
               ) : null}
             </>
           )}

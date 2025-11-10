@@ -34,7 +34,7 @@ export default function Footer() {
           ) : build.error ? (
             <span title={String(build.error)}>Build: unknown</span>
           ) : (
-            <span title={"Built at " + dayjs(build.data?.builtAt).toString()}>
+            <span title={"Built on " + dayjs(build.data?.builtAt).toString()}>
               Build {build.data?.version}
               {build.data?.shortSha ? (
                 <> &middot; {build.data.shortSha}</>

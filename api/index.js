@@ -9,6 +9,7 @@ import playerRoutes from "./routes/player.js";
 import serverRoute from "./routes/server.js";
 import ingestRoute from "./routes/injest.js";
 import raidsRoutes from "./routes/raids.js";
+import versionRoute from "./routes/version.js";
 
 // authentication
 import { ensureApiKey } from "./utils/apiKey.js";
@@ -39,7 +40,6 @@ const [globalLimiter, apiLimiter] = await Promise.all([
   getGlobalLimiter(),
   getApiLimiter(),
 ]);
-// app.use(globalLimiter);
 // TODO: Handle errors
 // TODO: Handle headers
 
@@ -54,10 +54,13 @@ app.get("/", async (req, res) => {
   res.json({ status: "ok" });
 });
 
-app.use("/player", globalLimiter, playerRoutes);
-app.use("/raids", globalLimiter, raidsRoutes);
-app.use("/server", globalLimiter, serverRoute);
 app.use("/ingest", requireApiKey, ingestRoute);
+// Register the global rate limiter for all other routes after ingest
+app.use(globalLimiter);
+app.use("/player", playerRoutes);
+app.use("/raids", raidsRoutes);
+app.use("/server", serverRoute);
+app.use("/version", versionRoute);
 
 app.listen(port, () => {
   console.log(`READY! API listening on :${port}`);

@@ -24,7 +24,6 @@ jobs:
     build-and-push:
         name: Build & Push (${{ matrix.service }})
         runs-on: ubuntu-latest
-
         strategy:
             fail-fast: false
             matrix:
@@ -42,12 +41,23 @@ jobs:
               run: |
                   REPO_LOWER=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
                   OWNER_LOWER=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
-                  # image name pattern: ghcr.io/<owner>/<repo>-<service>
                   echo "owner_lower=${OWNER_LOWER}" >> $GITHUB_OUTPUT
                   echo "repo_lower=${REPO_LOWER}"   >> $GITHUB_OUTPUT
                   echo "image=${{ env.REGISTRY }}/${OWNER_LOWER}/${REPO_LOWER}-${{ matrix.service }}" >> $GITHUB_OUTPUT
 
-            - name: Set up QEMU (optional multi-arch)
+            - name: Compute CalVer
+              id: ver
+              shell: bash
+              run: |
+                  # CalVer format: YYYY.MM.DD  (change +%d.%m.%Y if you prefer day-month-year order)
+                  CALVER=$(date -u +%Y.%m.%d)
+                  BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+                  SHORT_SHA=${GITHUB_SHA::7}
+                  echo "calver=${CALVER}" >> $GITHUB_OUTPUT
+                  echo "build_time=${BUILD_TIME}" >> $GITHUB_OUTPUT
+                  echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+
+            - name: Set up QEMU
               uses: docker/setup-qemu-action@v3
 
             - name: Set up Docker Buildx
@@ -66,6 +76,7 @@ jobs:
               with:
                   images: ${{ steps.prep.outputs.image }}
                   tags: |
+                      type=raw,value=${{ steps.ver.outputs.calver }}
                       type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
                       type=ref,event=branch
                       type=ref,event=pr
@@ -85,3 +96,8 @@ jobs:
                   labels: ${{ steps.meta.outputs.labels }}
                   cache-from: type=gha
                   cache-to: type=gha,mode=max
+                  build-args: |
+                      BUILD_VERSION=${{ steps.ver.outputs.calver }}
+                      BUILD_SHA=${{ github.sha }}
+                      BUILD_SHORT_SHA=${{ steps.ver.outputs.short_sha }}
+                      BUILD_TIME=${{ steps.ver.outputs.build_time }}

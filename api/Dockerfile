@@ -1,17 +1,20 @@
-FROM node:22 AS base
+FROM node:20-alpine AS base
 WORKDIR /usr/src/app
-
-# Only package files to leverage Docker layer caching
 COPY package*.json ./
+RUN npm ci
 
 FROM base AS dev
-RUN npm ci && npm i -D nodemon
+WORKDIR /usr/src/app
+ENV NODE_ENV=development
 COPY . .
 EXPOSE 3000
 CMD ["npm", "run", "dev"]
 
-FROM base AS prod
-RUN npm ci --omit=dev
+FROM node:20-alpine AS prod
+WORKDIR /usr/src/app
+ENV NODE_ENV=production
+COPY --from=base /usr/src/app/node_modules ./node_modules
 COPY . .
+RUN npm prune --omit=dev
 EXPOSE 3000
-CMD ["npm", "start"]
+CMD ["node", "index.js"]

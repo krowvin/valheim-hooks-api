@@ -33,6 +33,11 @@ services:
       SERVER_MAX_PLAYERS: "10"
       CHOKIDAR_USEPOLLING: "true"
       CHOKIDAR_INTERVAL: "300"
+      # ---- test build metadata for /version ----
+      BUILD_VERSION: "09.11.2025" # DD.MM.YYYY
+      BUILD_SHA: "ffffffffffffffffffffffffffffffffffffffff"
+      BUILD_SHORT_SHA: "fffffff"
+      BUILD_TIME: "2025-11-09T20:15:00Z"
     ports: ["3000:3000"]
     # volumes:
     # - ./api:/usr/src/app

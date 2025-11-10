@@ -23,6 +23,7 @@ then monitor / update locally with
 
 - List keys/values: `docker exec valheim-hooks-api-cache-1 valkey-cli keys *`
 - Clear all keys: `docker exec valheim-hooks-api-cache-1 valkey-cli FLUSHALL`
+- Read contents of ZRANGE (Player/raid/etc): `docker exec valheim-hooks-api-cache-1 valkey-cli ZRANGE steam:candidates 0 -1 WITHSCORES`
 
 ## The Magic
 

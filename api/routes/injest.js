@@ -12,6 +12,8 @@ const RE_PLAYER_SPAWNED =
   /Got character ZDOID from\s+([^:]+)\s*:\s*([-\d]+)\s*:\s*(\d+)/i;
 const RE_CLOSING_SOCKET = /Closing socket\s+(\d{17})/i;
 const RE_RPC_DISCONNECT = /\bRPC_Disconnect\b/i;
+// World events
+const RE_WORLD_SAVED = /World saved/i;
 
 // Server lifecycle
 const RE_UPDATING =
@@ -29,7 +31,21 @@ const RE_RAID = /(Random event set:)/i;
 const STEAM_CANDIDATE_TTL_SEC = 60;
 const STEAM_PAIR_WINDOW_MS = 30_000;
 const PLAYER_TTL_SEC = 24 * 3600;
+const ONLINE_TTL_MS = PLAYER_TTL_SEC * 1000;
 const MAX_ONLINE = 10;
+
+async function pruneStaleOnline(kv, now = Date.now()) {
+  /* 
+    Remove players from "players:online" whose last-seen is older than ONLINE_TTL_MS    
+  */
+  const cutoff = String(now - ONLINE_TTL_MS);
+  await kv.customCommand([
+    "ZREMRANGEBYSCORE",
+    "players:online",
+    "-inf",
+    cutoff,
+  ]);
+}
 
 async function recordSteamCandidate(kv, steamId, now = Date.now()) {
   await kv.customCommand([
@@ -74,6 +90,10 @@ async function pairNameWithRecentSteam(kv, playerName, now = Date.now()) {
 
 async function markPlayerOnline(kv, playerId, extra = {}) {
   const now = Date.now();
+
+  // prune old members first
+  await pruneStaleOnline(kv, now);
+
   const sessKey = `player:sess:${playerId}`;
   const hasSession = Number(await kv.customCommand(["EXISTS", sessKey]));
   if (!hasSession) {
@@ -94,42 +114,34 @@ async function markPlayerOnline(kv, playerId, extra = {}) {
     { ex: PLAYER_TTL_SEC }
   );
 
-  // refresh score if exists, else add new and enforce cap
+  // refresh/update last-seen
   await kv.customCommand([
     "ZADD",
     "players:online",
-    "XX",
     "CH",
     String(now),
     String(playerId),
   ]);
-  const added = await kv.customCommand([
-    "ZADD",
-    "players:online",
-    "NX",
-    String(now),
-    String(playerId),
-  ]);
-  if (Number(added) > 0) {
-    const size = Number(await kv.customCommand(["ZCARD", "players:online"]));
-    if (size > MAX_ONLINE) {
-      const overflow = size - MAX_ONLINE;
-      const oldest = await kv.customCommand([
-        "ZRANGE",
-        "players:online",
-        "0",
-        String(overflow - 1),
-      ]);
-      await kv.customCommand([
-        "ZREMRANGEBYRANK",
-        "players:online",
-        "0",
-        String(overflow - 1),
-      ]);
-      for (const id of oldest) {
-        await kv.del(`player:id:${id}`);
-        await kv.del(`player:sess:${id}`);
-      }
+
+  // Enforce max online limit
+  const size = Number(await kv.customCommand(["ZCARD", "players:online"]));
+  if (size > MAX_ONLINE) {
+    const overflow = size - MAX_ONLINE;
+    const oldest = await kv.customCommand([
+      "ZRANGE",
+      "players:online",
+      "0",
+      String(overflow - 1),
+    ]);
+    await kv.customCommand([
+      "ZREMRANGEBYRANK",
+      "players:online",
+      "0",
+      String(overflow - 1),
+    ]);
+    for (const id of oldest) {
+      await kv.del(`player:id:${id}`);
+      await kv.del(`player:sess:${id}`);
     }
   }
 }
@@ -196,7 +208,6 @@ function classifyServer(line) {
 /* ------------ Unified ingest endpoint ------------ */
 router.post("/log", async (req, res) => {
   const { line = "", ts } = req.body || {};
-  console.log("Ingest log line:", line);
   if (!line || typeof line !== "string") {
     return res.status(400).json({ error: "Missing 'line' string in body" });
   }
@@ -221,6 +232,17 @@ router.post("/log", async (req, res) => {
     return res.json({
       handled: true,
       kind: "steam-candidate",
+      status: status || null,
+    });
+  }
+
+  // Attempt a player cleanup when world is saved
+  m = line.match(RE_WORLD_SAVED);
+  if (m) {
+    await pruneStaleOnline(kv, now);
+    return res.json({
+      handled: true,
+      kind: "world-saved",
       status: status || null,
     });
   }

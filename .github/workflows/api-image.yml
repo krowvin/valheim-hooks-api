@@ -49,7 +49,7 @@ jobs:
               id: ver
               shell: bash
               run: |
-                  # CalVer format: YYYY.MM.DD  (change +%d.%m.%Y if you prefer day-month-year order)
+                  # CalVer format: YYYY.MM.DD
                   CALVER=$(date -u +%Y.%m.%d)
                   BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
                   SHORT_SHA=${GITHUB_SHA::7}
